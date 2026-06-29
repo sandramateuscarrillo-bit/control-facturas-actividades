@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Control de Facturas y Presupuesto</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+  * { box-sizing: border-box; font-family: Arial, sans-serif; }
+  body { background:#f4f6f8; margin:0; padding:20px; color:#222; }
+  h1 { text-align:center; color:#1b3a57; }
+  .container { max-width:1100px; margin:0 auto; }
+  .card { background:#fff; border-radius:8px; padding:20px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,.15); }
+  h2 { margin-top:0; color:#1b3a57; border-bottom:2px solid #eee; padding-bottom:8px; }
+  label { display:block; font-size:13px; font-weight:bold; margin-top:10px; }
+  input, select, textarea { width:100%; padding:8px; margin-top:4px; border:1px solid #ccc; border-radius:4px; font-size:14px; }
+  .row { display:flex; gap:15px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:150px; }
+  button { cursor:pointer; border:none; border-radius:4px; padding:10px 18px; font-size:14px; font-weight:bold; }
+  .btn-primary { background:#1b6fb8; color:#fff; margin-top:15px; }
+  .btn-primary:hover { background:#15578f; }
+  .btn-danger { background:#d9534f; color:#fff; padding:5px 10px; font-size:12px; }
+  .btn-danger:hover { background:#b52b27; }
+  .btn-edit { background:#f0ad4e; color:#fff; padding:5px 10px; font-size:12px; margin-right:5px;}
+  .btn-edit:hover { background:#d99a32; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; }
+  th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+  th { background:#1b3a57; color:#fff; }
+  tr:nth-child(even) { background:#f9f9f9; }
+  .totales { display:flex; gap:15px; flex-wrap:wrap; margin-top:10px; }
+  .totales div { background:#eef4fa; border-radius:6px; padding:12px; flex:1; min-width:160px; text-align:center; }
+  .totales .label { font-size:12px; color:#555; }
+  .totales .valor { font-size:20px; font-weight:bold; color:#1b3a57; }
+  .ok { color:#2e7d32; }
+  .warn { color:#c62828; }
+  .barra-bg { background:#e0e0e0; border-radius:6px; height:14px; width:100%; margin-top:4px; overflow:hidden; }
+  .barra-fill { height:100%; }
+  .filtros { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .filtros > div { flex:1; min-width:140px; }
+  .acciones-top { display:flex; justify-content:flex-end; gap:10px; margin-top:-10px; }
+  small.hint { color:#777; }
+  .tabs { display:flex; gap:8px; max-width:1100px; margin:0 auto 15px; }
+  .tab-btn { flex:1; padding:12px; background:#dfe7ee; color:#1b3a57; border-radius:6px 6px 0 0; }
+  .tab-btn.active { background:#1b3a57; color:#fff; }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+  .badge { display:inline-block; padding:3px 8px; border-radius:10px; font-size:11px; font-weight:bold; color:#fff; }
+  .badge-pendiente { background:#f0ad4e; }
+  .badge-ejecucion { background:#5bc0de; }
+  .badge-ejecutada { background:#2e7d32; }
+  .alerta-box { border-radius:6px; padding:14px; margin-bottom:15px; }
+  .alerta-roja { background:#fdecea; border:1px solid #f5c6cb; }
+  .alerta-amarilla { background:#fff8e1; border:1px solid #ffe082; }
+  .alerta-box ul { margin:6px 0 0 18px; padding:0; }
+  .alerta-box li { margin-bottom:4px; }
+  .fila-vencida { background:#fdecea !important; }
+  .fila-proxima { background:#fff8e1 !important; }
+  .badge-alta { background:#c62828; }
+  .badge-media { background:#f0ad4e; }
+  .badge-baja { background:#5bc0de; }
+  .periodo-btns { display:flex; gap:8px; margin-bottom:15px; }
+  .periodo-btns button { flex:1; background:#dfe7ee; color:#1b3a57; }
+  .periodo-btns button.active { background:#1b3a57; color:#fff; }
+  .kpis { display:flex; gap:15px; flex-wrap:wrap; }
+  .kpis div { background:#eef4fa; border-radius:6px; padding:14px; flex:1; min-width:150px; text-align:center; }
+  .kpis .label { font-size:12px; color:#555; }
+  .kpis .valor { font-size:24px; font-weight:bold; color:#1b3a57; }
+  .barra-h-wrap { margin:8px 0; }
+  .barra-h-label { font-size:13px; margin-bottom:3px; display:flex; justify-content:space-between; }
+  .barra-h-bg { background:#e0e0e0; border-radius:6px; height:18px; overflow:hidden; }
+  .barra-h-fill { height:100%; display:flex; align-items:center; padding-left:6px; color:#fff; font-size:11px; font-weight:bold; white-space:nowrap; }
+  .admin-bar { max-width:1100px; margin:0 auto 10px; background:#1b3a57; border-radius:8px; padding:14px 18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .admin-bar label { color:#fff; font-size:13px; margin:0; white-space:nowrap; }
+  .admin-bar select { width:auto; min-width:200px; margin:0; }
+  .admin-bar button { padding:8px 14px; font-size:13px; }
+  .admin-bar .btn-admin { background:#2e7d32; color:#fff; }
+  .admin-bar .btn-admin-edit { background:#f0ad4e; color:#fff; }
+  .admin-bar .btn-admin-del { background:#d9534f; color:#fff; }
+</style>
+</head>
+<body>
+<div class="admin-bar">
+  <label>Administración / Conjunto activo:</label>
+  <select id="selAdminActivo" onchange="seleccionarAdmin()"></select>
+  <button class="btn-admin" onclick="crearAdmin()">+ Nueva Administración</button>
+  <button class="btn-admin-edit" onclick="renombrarAdmin()">Renombrar</button>
+  <button class="btn-admin-del" onclick="eliminarAdmin()">Eliminar</button>
+</div>
+<div class="tabs">
+  <button class="tab-btn active" id="btnTabFacturas" onclick="cambiarTab('facturas')">Facturas y Presupuesto</button>
+  <button class="tab-btn" id="btnTabActividades" onclick="cambiarTab('actividades')">Actividades</button>
+  <button class="tab-btn" id="btnTabDashboard" onclick="cambiarTab('dashboard')">Dashboard</button>
+</div>
+<div class="container tab-content active" id="tabFacturas">
+  <h1>Control de Facturas y Presupuesto</h1>
+
+  <!-- PRESUPUESTO POR CATEGORIA -->
+  <div class="card">
+    <h2>Presupuesto por Categoría</h2>
+    <div class="row">
+      <div>
+        <label>Categoría</label>
+        <input id="presCategoria" placeholder="Ej: Transporte, Materiales, Viáticos...">
+      </div>
+      <div>
+        <label>Presupuesto asignado ($)</label>
+        <input id="presValor" type="number" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div style="display:flex; align-items:flex-end;">
+        <button class="btn-primary" onclick="guardarPresupuesto()" style="margin-top:10px;">Guardar Presupuesto</button>
+      </div>
+    </div>
+    <table id="tablaPresupuesto">
+      <thead><tr><th>Categoría</th><th>Presupuesto</th><th>Gastado</th><th>Disponible</th><th>% Usado</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- REGISTRO DE FACTURAS -->
+  <div class="card">
+    <h2 id="tituloForm">Registrar Factura</h2>
+    <input type="hidden" id="facturaId">
+    <div class="row">
+      <div>
+        <label>N° Factura</label>
+        <input id="numFactura" placeholder="Ej: F-001">
+      </div>
+      <div>
+        <label>Proveedor</label>
+        <input id="proveedor" placeholder="Nombre del proveedor">
+      </div>
+      <div>
+        <label>Categoría</label>
+        <select id="categoria"></select>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Valor ($)</label>
+        <input id="valor" type="number" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div>
+        <label>Fecha</label>
+        <input type="date" id="fecha">
+      </div>
+    </div>
+    <label>Observación</label>
+    <textarea id="observacion" rows="2" placeholder="Notas u observaciones..."></textarea>
+    <button class="btn-primary" onclick="guardarFactura()">Guardar Factura</button>
+    <button class="btn-primary" style="background:#777; display:none;" id="btnCancelar" onclick="cancelarEdicion()">Cancelar edición</button>
+  </div>
+
+  <!-- TOTALES GENERALES -->
+  <div class="card">
+    <h2>Resumen General</h2>
+    <div class="totales">
+      <div><div class="label">Total Presupuestado</div><div class="valor" id="totPres">$0</div></div>
+      <div><div class="label">Total Gastado</div><div class="valor" id="totGasto">$0</div></div>
+      <div><div class="label">Disponible</div><div class="valor" id="totDisp">$0</div></div>
+      <div><div class="label">N° Facturas</div><div class="valor" id="totFacturas">0</div></div>
+    </div>
+  </div>
+
+  <!-- LISTADO Y FILTROS -->
+  <div class="card">
+    <h2>Facturas Registradas</h2>
+    <div class="filtros">
+      <div>
+        <label>Filtrar por categoría</label>
+        <select id="filtroCategoria" onchange="renderFacturas()"></select>
+      </div>
+      <div>
+        <label>Buscar (proveedor / N° / obs.)</label>
+        <input id="filtroTexto" oninput="renderFacturas()" placeholder="Escribe para buscar...">
+      </div>
+      <div>
+        <label>Desde</label>
+        <input type="date" id="filtroDesde" onchange="renderFacturas()">
+      </div>
+      <div>
+        <label>Hasta</label>
+        <input type="date" id="filtroHasta" onchange="renderFacturas()">
+      </div>
+    </div>
+    <div class="acciones-top">
+      <button class="btn-primary" style="background:#2e7d32;" onclick="exportarFacturasExcel()">Exportar Reporte Excel</button>
+    </div>
+    <table>
+      <thead><tr><th>N° Factura</th><th>Proveedor</th><th>Categoría</th><th>Valor</th><th>Fecha</th><th>Observación</th><th>Acciones</th></tr></thead>
+      <tbody id="cuerpoFacturas"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="container tab-content" id="tabActividades">
+  <h1>Seguimiento de Actividades</h1>
+
+  <div class="card" id="alertasCard">
+    <h2>Alertas</h2>
+    <div id="alertasContenido"></div>
+  </div>
+
+  <div class="card">
+    <h2>Otras Categorías (no ligadas al presupuesto)</h2>
+    <small class="hint">Crea aquí categorías de seguimiento libres, sin necesidad de asignarles un presupuesto.</small>
+    <div class="row">
+      <div>
+        <input id="nuevaCategoriaLibre" placeholder="Ej: Trámites personales, Mantenimiento, Capacitaciones...">
+      </div>
+      <div style="display:flex; align-items:flex-end;">
+        <button class="btn-primary" onclick="guardarCategoriaLibre()" style="margin-top:0;">Agregar Categoría</button>
+      </div>
+    </div>
+    <div id="listaCategoriasLibresChips" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="card">
+    <h2 id="tituloFormAct">Registrar Actividad</h2>
+    <input type="hidden" id="actividadId">
+    <div class="row">
+      <div>
+        <label>Nombre de la actividad</label>
+        <input id="actNombre" placeholder="Ej: Pago de arriendo, Compra de equipos...">
+      </div>
+      <div>
+        <label>Categoría (opcional, puede no estar ligada al presupuesto)</label>
+        <input id="actCategoria" list="listaCategoriasAct" placeholder="Selecciona o escribe una nueva">
+        <datalist id="listaCategoriasAct"></datalist>
+      </div>
+      <div>
+        <label>Estado</label>
+        <select id="actEstado">
+          <option value="Pendiente">Pendiente</option>
+          <option value="En ejecución">En ejecución</option>
+          <option value="Ejecutada">Ejecutada</option>
+        </select>
+      </div>
+      <div>
+        <label>Nivel de importancia</label>
+        <select id="actImportancia">
+          <option value="Alta">Alta</option>
+          <option value="Media" selected>Media</option>
+          <option value="Baja">Baja</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Fecha de inicio</label>
+        <input type="date" id="actFechaInicio">
+      </div>
+      <div>
+        <label>Fecha límite / vencimiento (pago o ejecución)</label>
+        <input type="date" id="actFechaFin">
+      </div>
+      <div>
+        <label>Valor estimado ($) (opcional)</label>
+        <input type="number" min="0" step="0.01" id="actValor" placeholder="0.00">
+      </div>
+    </div>
+    <label>Observación</label>
+    <textarea id="actObservacion" rows="2" placeholder="Notas u observaciones..."></textarea>
+    <button class="btn-primary" onclick="guardarActividad()">Guardar Actividad</button>
+    <button class="btn-primary" style="background:#777; display:none;" id="btnCancelarAct" onclick="cancelarEdicionAct()">Cancelar edición</button>
+  </div>
+
+  <div class="card">
+    <h2>Actividades Registradas</h2>
+    <div class="filtros">
+      <div>
+        <label>Filtrar por estado</label>
+        <select id="filtroEstadoAct" onchange="renderActividades()">
+          <option value="">Todos</option>
+          <option value="Pendiente">Pendiente</option>
+          <option value="En ejecución">En ejecución</option>
+          <option value="Ejecutada">Ejecutada</option>
+        </select>
+      </div>
+      <div>
+        <label>Filtrar por categoría</label>
+        <select id="filtroCategoriaAct" onchange="renderActividades()"></select>
+      </div>
+      <div>
+        <label>Filtrar por importancia</label>
+        <select id="filtroImportanciaAct" onchange="renderActividades()">
+          <option value="">Todas</option>
+          <option value="Alta">Alta</option>
+          <option value="Media">Media</option>
+          <option value="Baja">Baja</option>
+        </select>
+      </div>
+      <div>
+        <label>Buscar (nombre / obs.)</label>
+        <input id="filtroTextoAct" oninput="renderActividades()" placeholder="Escribe para buscar...">
+      </div>
+    </div>
+    <div class="acciones-top">
+      <button class="btn-primary" style="background:#2e7d32;" onclick="exportarActividadesExcel()">Exportar Reporte Excel</button>
+    </div>
+    <small class="hint">Ordenadas automáticamente por las que están más cerca de vencer.</small>
+    <table>
+      <thead><tr><th>Actividad</th><th>Categoría</th><th>Estado</th><th>Importancia</th><th>Inicio</th><th>Vence</th><th>Valor est.</th><th>Días restantes</th><th>Observación</th><th>Acciones</th></tr></thead>
+      <tbody id="cuerpoActividades"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="container tab-content" id="tabDashboard">
+  <h1>Dashboard de Actividades</h1>
+
+  <div class="card">
+    <h2>Periodo de visualización</h2>
+    <div class="periodo-btns">
+      <button class="active" id="btnPerSemana" onclick="cambiarPeriodo('semana')">Esta semana</button>
+      <button id="btnPerMes" onclick="cambiarPeriodo('mes')">Este mes</button>
+      <button id="btnPerAnio" onclick="cambiarPeriodo('anio')">Este año</button>
+      <button id="btnPerTodo" onclick="cambiarPeriodo('todo')">Todo</button>
+    </div>
+    <small class="hint" id="rangoPeriodoTexto"></small>
+  </div>
+
+  <div class="card">
+    <h2>Resumen General</h2>
+    <div class="kpis">
+      <div><div class="label">Total Actividades</div><div class="valor" id="kpiTotal">0</div></div>
+      <div><div class="label">Ejecutadas</div><div class="valor" id="kpiEjecutadas">0</div></div>
+      <div><div class="label">En Ejecución</div><div class="valor" id="kpiEnEjecucion">0</div></div>
+      <div><div class="label">Pendientes</div><div class="valor" id="kpiPendientes">0</div></div>
+      <div><div class="label">Vencidas</div><div class="valor" id="kpiVencidas">0</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Por Nivel de Importancia</h2>
+    <div id="graficoImportancia"></div>
+  </div>
+
+  <div class="card">
+    <h2>Por Categoría</h2>
+    <div id="graficoCategoria"></div>
+  </div>
+
+  <div class="acciones-top" style="margin-bottom:10px;">
+    <button class="btn-primary" style="background:#2e7d32;" onclick="exportarDashboardExcel()">Exportar Dashboard a Excel</button>
+  </div>
+</div>
+
+<script>
+const ADMINS_KEY = 'administraciones_v1';
+const ADMIN_ACTUAL_KEY = 'admin_actual_v1';
+const DIAS_ALERTA = 7;
+let periodoActual = 'semana';
+
+// ---------- Administraciones (multi-conjunto) ----------
+function cargarAdmins() {
+  let admins = JSON.parse(localStorage.getItem(ADMINS_KEY) || 'null');
+  if (!admins || admins.length === 0) {
+    admins = [{ id: 'default', nombre: 'Administración 1' }];
+    localStorage.setItem(ADMINS_KEY, JSON.stringify(admins));
+  }
+  return admins;
+}
+function guardarAdminsDB(d) { localStorage.setItem(ADMINS_KEY, JSON.stringify(d)); }
+
+function getAdminActualId() {
+  const admins = cargarAdmins();
+  let actual = localStorage.getItem(ADMIN_ACTUAL_KEY);
+  if (!actual || !admins.find(a => a.id === actual)) {
+    actual = admins[0].id;
+    localStorage.setItem(ADMIN_ACTUAL_KEY, actual);
+  }
+  return actual;
+}
+
+function claveAdmin(base) {
+  return base + '__' + getAdminActualId();
+}
+
+function renderSelectorAdmin() {
+  const admins = cargarAdmins();
+  const sel = document.getElementById('selAdminActivo');
+  const actual = getAdminActualId();
+  sel.innerHTML = admins.map(a => `<option value="${a.id}" ${a.id === actual ? 'selected' : ''}>${a.nombre}</option>`).join('');
+}
+
+function seleccionarAdmin() {
+  const sel = document.getElementById('selAdminActivo');
+  localStorage.setItem(ADMIN_ACTUAL_KEY, sel.value);
+  renderTodo();
+}
+
+function crearAdmin() {
+  const nombre = prompt('Nombre de la nueva administración o conjunto:');
+  if (!nombre || !nombre.trim()) return;
+  const admins = cargarAdmins();
+  const id = 'admin_' + Date.now();
+  admins.push({ id, nombre: nombre.trim() });
+  guardarAdminsDB(admins);
+  localStorage.setItem(ADMIN_ACTUAL_KEY, id);
+  renderTodo();
+}
+
+function renombrarAdmin() {
+  const admins = cargarAdmins();
+  const actual = getAdminActualId();
+  const admin = admins.find(a => a.id === actual);
+  const nuevoNombre = prompt('Nuevo nombre para esta administración:', admin.nombre);
+  if (!nuevoNombre || !nuevoNombre.trim()) return;
+  admin.nombre = nuevoNombre.trim();
+  guardarAdminsDB(admins);
+  renderSelectorAdmin();
+}
+
+function eliminarAdmin() {
+  const admins = cargarAdmins();
+  if (admins.length <= 1) { alert('Debe existir al menos una administración.'); return; }
+  const actual = getAdminActualId();
+  const admin = admins.find(a => a.id === actual);
+  if (!confirm(`¿Eliminar la administración "${admin.nombre}" y TODOS sus datos (facturas, presupuestos, actividades, categorías)? Esta acción no se puede deshacer.`)) return;
+
+  ['facturas_db_v1','presupuestos_db_v1','actividades_db_v1','categorias_libres_v1'].forEach(base => {
+    localStorage.removeItem(base + '__' + actual);
+  });
+  const restantes = admins.filter(a => a.id !== actual);
+  guardarAdminsDB(restantes);
+  localStorage.setItem(ADMIN_ACTUAL_KEY, restantes[0].id);
+  renderTodo();
+}
+
+function DB_KEY_F() { return claveAdmin('facturas_db_v1'); }
+function PRES_KEY_F() { return claveAdmin('presupuestos_db_v1'); }
+function ACT_KEY_F() { return claveAdmin('actividades_db_v1'); }
+function CAT_LIBRE_KEY_F() { return claveAdmin('categorias_libres_v1'); }
+
+function migrarDatosAntiguos() {
+  if (localStorage.getItem('migracion_admins_v1')) return;
+  ['facturas_db_v1','presupuestos_db_v1','actividades_db_v1','categorias_libres_v1'].forEach(base => {
+    const viejo = localStorage.getItem(base);
+    if (viejo !== null) {
+      localStorage.setItem(base + '__default', viejo);
+      localStorage.removeItem(base);
+    }
+  });
+  localStorage.setItem('migracion_admins_v1', '1');
+}
+migrarDatosAntiguos();
+
+function cambiarTab(tab) {
+  document.getElementById('tabFacturas').classList.toggle('active', tab === 'facturas');
+  document.getElementById('tabActividades').classList.toggle('active', tab === 'actividades');
+  document.getElementById('tabDashboard').classList.toggle('active', tab === 'dashboard');
+  document.getElementById('btnTabFacturas').classList.toggle('active', tab === 'facturas');
+  document.getElementById('btnTabActividades').classList.toggle('active', tab === 'actividades');
+  document.getElementById('btnTabDashboard').classList.toggle('active', tab === 'dashboard');
+  if (tab === 'actividades') renderActividades();
+  if (tab === 'dashboard') renderDashboard();
+}
+
+function cargarFacturas() { return JSON.parse(localStorage.getItem(DB_KEY_F()) || '[]'); }
+function guardarFacturasDB(d) { localStorage.setItem(DB_KEY_F(), JSON.stringify(d)); }
+function cargarPresupuestos() { return JSON.parse(localStorage.getItem(PRES_KEY_F()) || '{}'); }
+function guardarPresupuestosDB(d) { localStorage.setItem(PRES_KEY_F(), JSON.stringify(d)); }
+
+function guardarPresupuesto() {
+  const cat = document.getElementById('presCategoria').value.trim();
+  const val = parseFloat(document.getElementById('presValor').value);
+  if (!cat || isNaN(val) || val < 0) { alert('Ingresa una categoría y un valor válido.'); return; }
+  const pres = cargarPresupuestos();
+  pres[cat] = val;
+  guardarPresupuestosDB(pres);
+  document.getElementById('presCategoria').value = '';
+  document.getElementById('presValor').value = '';
+  renderTodo();
+}
+
+function eliminarPresupuesto(cat) {
+  if (!confirm('¿Eliminar el presupuesto de "' + cat + '"? (las facturas de esta categoría no se borran)')) return;
+  const pres = cargarPresupuestos();
+  delete pres[cat];
+  guardarPresupuestosDB(pres);
+  renderTodo();
+}
+
+function guardarFactura() {
+  const id = document.getElementById('facturaId').value;
+  const numFactura = document.getElementById('numFactura').value.trim();
+  const proveedor = document.getElementById('proveedor').value.trim();
+  const categoria = document.getElementById('categoria').value;
+  const valor = parseFloat(document.getElementById('valor').value);
+  const fecha = document.getElementById('fecha').value;
+  const observacion = document.getElementById('observacion').value.trim();
+
+  if (!proveedor || !categoria || isNaN(valor) || valor <= 0 || !fecha) {
+    alert('Completa al menos: proveedor, categoría, valor (>0) y fecha.');
+    return;
+  }
+
+  let facturas = cargarFacturas();
+  if (id) {
+    facturas = facturas.map(f => f.id === id ? {...f, numFactura, proveedor, categoria, valor, fecha, observacion} : f);
+  } else {
+    facturas.push({ id: Date.now().toString(), numFactura, proveedor, categoria, valor, fecha, observacion });
+  }
+  guardarFacturasDB(facturas);
+  cancelarEdicion();
+  renderTodo();
+}
+
+function editarFactura(id) {
+  const f = cargarFacturas().find(x => x.id === id);
+  if (!f) return;
+  document.getElementById('facturaId').value = f.id;
+  document.getElementById('numFactura').value = f.numFactura;
+  document.getElementById('proveedor').value = f.proveedor;
+  document.getElementById('categoria').value = f.categoria;
+  document.getElementById('valor').value = f.valor;
+  document.getElementById('fecha').value = f.fecha;
+  document.getElementById('observacion').value = f.observacion;
+  document.getElementById('tituloForm').textContent = 'Editar Factura';
+  document.getElementById('btnCancelar').style.display = 'inline-block';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function cancelarEdicion() {
+  document.getElementById('facturaId').value = '';
+  document.getElementById('numFactura').value = '';
+  document.getElementById('proveedor').value = '';
+  document.getElementById('valor').value = '';
+  document.getElementById('fecha').value = '';
+  document.getElementById('observacion').value = '';
+  document.getElementById('tituloForm').textContent = 'Registrar Factura';
+  document.getElementById('btnCancelar').style.display = 'none';
+}
+
+function eliminarFactura(id) {
+  if (!confirm('¿Eliminar esta factura?')) return;
+  guardarFacturasDB(cargarFacturas().filter(f => f.id !== id));
+  renderTodo();
+}
+
+function formatoMoneda(n) {
+  return '$' + n.toLocaleString('es-CO', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function renderCategoriasSelects() {
+  const pres = cargarPresupuestos();
+  const cats = Object.keys(pres).sort();
+  const selCat = document.getElementById('categoria');
+  const selFiltro = document.getElementById('filtroCategoria');
+  const prevCat = selCat.value, prevFiltro = selFiltro.value;
+
+  selCat.innerHTML = cats.length ? cats.map(c => `<option value="${c}">${c}</option>`).join('') : '<option value="">-- crea una categoría arriba --</option>';
+  selFiltro.innerHTML = '<option value="">Todas</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+
+  if (cats.includes(prevCat)) selCat.value = prevCat;
+  if (cats.includes(prevFiltro)) selFiltro.value = prevFiltro;
+}
+
+function renderPresupuesto() {
+  const pres = cargarPresupuestos();
+  const facturas = cargarFacturas();
+  const tbody = document.querySelector('#tablaPresupuesto tbody');
+  const cats = Object.keys(pres).sort();
+
+  if (cats.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#777;">No hay presupuestos definidos.</td></tr>';
+  } else {
+    tbody.innerHTML = cats.map(cat => {
+      const gastado = facturas.filter(f => f.categoria === cat).reduce((s,f) => s + f.valor, 0);
+      const presupuesto = pres[cat];
+      const disponible = presupuesto - gastado;
+      const pct = presupuesto > 0 ? Math.min(100, (gastado/presupuesto)*100) : 0;
+      const color = pct >= 100 ? '#d9534f' : (pct >= 80 ? '#f0ad4e' : '#2e7d32');
+      return `<tr>
+        <td>${cat}</td>
+        <td>${formatoMoneda(presupuesto)}</td>
+        <td>${formatoMoneda(gastado)}</td>
+        <td class="${disponible < 0 ? 'warn' : 'ok'}">${formatoMoneda(disponible)}</td>
+        <td>
+          ${pct.toFixed(1)}%
+          <div class="barra-bg"><div class="barra-fill" style="width:${pct}%; background:${color};"></div></div>
+        </td>
+        <td><button class="btn-danger" onclick="eliminarPresupuesto('${cat}')">Eliminar</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  const totPres = cats.reduce((s,c) => s + pres[c], 0);
+  const totGasto = facturas.reduce((s,f) => s + f.valor, 0);
+  document.getElementById('totPres').textContent = formatoMoneda(totPres);
+  document.getElementById('totGasto').textContent = formatoMoneda(totGasto);
+  document.getElementById('totDisp').textContent = formatoMoneda(totPres - totGasto);
+  document.getElementById('totFacturas').textContent = facturas.length;
+}
+
+function renderFacturas() {
+  const facturas = cargarFacturas();
+  const filtroCat = document.getElementById('filtroCategoria').value;
+  const filtroTexto = document.getElementById('filtroTexto').value.toLowerCase();
+  const desde = document.getElementById('filtroDesde').value;
+  const hasta = document.getElementById('filtroHasta').value;
+
+  let filtradas = facturas.filter(f => {
+    if (filtroCat && f.categoria !== filtroCat) return false;
+    if (desde && f.fecha < desde) return false;
+    if (hasta && f.fecha > hasta) return false;
+    if (filtroTexto) {
+      const texto = (f.numFactura + ' ' + f.proveedor + ' ' + f.observacion).toLowerCase();
+      if (!texto.includes(filtroTexto)) return false;
+    }
+    return true;
+  }).sort((a,b) => b.fecha.localeCompare(a.fecha));
+
+  const tbody = document.getElementById('cuerpoFacturas');
+  if (filtradas.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#777;">No hay facturas que coincidan.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtradas.map(f => `
+    <tr>
+      <td>${f.numFactura || '-'}</td>
+      <td>${f.proveedor}</td>
+      <td>${f.categoria}</td>
+      <td>${formatoMoneda(f.valor)}</td>
+      <td>${f.fecha}</td>
+      <td>${f.observacion || ''}</td>
+      <td>
+        <button class="btn-edit" onclick="editarFactura('${f.id}')">Editar</button>
+        <button class="btn-danger" onclick="eliminarFactura('${f.id}')">Eliminar</button>
+      </td>
+    </tr>`).join('');
+}
+
+// ---------- Estilos y utilidades de Excel profesional ----------
+const ESTILO_TITULO = { font: { bold: true, sz: 16, color: { rgb: '1B3A57' } } };
+const ESTILO_SUBTITULO = { font: { italic: true, sz: 10, color: { rgb: '666666' } } };
+const ESTILO_HEADER = { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 }, fill: { fgColor: { rgb: '1B3A57' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bordeFino() };
+const ESTILO_CELDA = { border: bordeFino(), alignment: { vertical: 'center' } };
+const ESTILO_CELDA_DINERO = { border: bordeFino(), alignment: { vertical: 'center', horizontal: 'right' }, numFmt: '$#,##0.00' };
+
+function bordeFino() {
+  const b = { style: 'thin', color: { rgb: 'CCCCCC' } };
+  return { top: b, bottom: b, left: b, right: b };
+}
+
+function hojaConEncabezado(titulo, subtitulo, columnas, filas, colDineroIdx) {
+  const aoa = [[titulo], [subtitulo], [], columnas];
+  filas.forEach(f => aoa.push(f));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['A1'].s = ESTILO_TITULO;
+  ws['A2'].s = ESTILO_SUBTITULO;
+
+  const headerRow = 4;
+  columnas.forEach((_, i) => {
+    const cell = XLSX.utils.encode_cell({ r: headerRow - 1, c: i });
+    if (ws[cell]) ws[cell].s = ESTILO_HEADER;
+  });
+
+  for (let r = 0; r < filas.length; r++) {
+    for (let c = 0; c < columnas.length; c++) {
+      const cell = XLSX.utils.encode_cell({ r: headerRow + r, c });
+      if (ws[cell]) ws[cell].s = (colDineroIdx && colDineroIdx.includes(c)) ? ESTILO_CELDA_DINERO : ESTILO_CELDA;
+    }
+  }
+
+  ws['!cols'] = columnas.map(() => ({ wch: 20 }));
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: columnas.length - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: columnas.length - 1 } }
+  ];
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: headerRow - 1, c: 0 }, e: { r: headerRow - 1, c: columnas.length - 1 } }) };
+  return ws;
+}
+
+function descargarLibro(wb, nombreArchivo) {
+  XLSX.writeFile(wb, nombreArchivo);
+}
+
+function fechaHoyTexto() {
+  return new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function nombreAdminActual() {
+  const admins = cargarAdmins();
+  const a = admins.find(x => x.id === getAdminActualId());
+  return a ? a.nombre : '';
+}
+
+function exportarFacturasExcel() {
+  const facturas = cargarFacturas();
+  if (facturas.length === 0) { alert('No hay facturas para exportar.'); return; }
+  const columnas = ['N° Factura', 'Proveedor', 'Categoría', 'Valor', 'Fecha', 'Observación'];
+  const filas = facturas.sort((a,b) => b.fecha.localeCompare(a.fecha))
+    .map(f => [f.numFactura || '-', f.proveedor, f.categoria, f.valor, f.fecha, f.observacion || '']);
+
+  const wb = XLSX.utils.book_new();
+  const ws = hojaConEncabezado('Reporte de Facturas y Presupuesto', `${nombreAdminActual()} — Generado el ${fechaHoyTexto()}`, columnas, filas, [3]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Facturas');
+  descargarLibro(wb, 'Reporte_Facturas_' + nombreAdminActual().replace(/\s+/g,'_') + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+
+function cargarActividades() { return JSON.parse(localStorage.getItem(ACT_KEY_F()) || '[]'); }
+function guardarActividadesDB(d) { localStorage.setItem(ACT_KEY_F(), JSON.stringify(d)); }
+function cargarCategoriasLibres() { return JSON.parse(localStorage.getItem(CAT_LIBRE_KEY_F()) || '[]'); }
+function guardarCategoriasLibresDB(d) { localStorage.setItem(CAT_LIBRE_KEY_F(), JSON.stringify(d)); }
+
+function guardarCategoriaLibre() {
+  const input = document.getElementById('nuevaCategoriaLibre');
+  const cat = input.value.trim();
+  if (!cat) { alert('Escribe el nombre de la categoría.'); return; }
+  const cats = cargarCategoriasLibres();
+  if (!cats.includes(cat)) { cats.push(cat); guardarCategoriasLibresDB(cats); }
+  input.value = '';
+  renderActividades();
+}
+
+function eliminarCategoriaLibre(cat) {
+  if (!confirm('¿Eliminar la categoría libre "' + cat + '"? (las actividades que ya la usan conservan el texto)')) return;
+  guardarCategoriasLibresDB(cargarCategoriasLibres().filter(c => c !== cat));
+  renderActividades();
+}
+
+function renderChipsCategoriasLibres() {
+  const cats = cargarCategoriasLibres();
+  const cont = document.getElementById('listaCategoriasLibresChips');
+  if (cats.length === 0) { cont.innerHTML = '<small class="hint">Aún no has creado categorías libres.</small>'; return; }
+  cont.innerHTML = cats.map(c => `<span class="badge badge-pendiente" style="margin:3px;">${c}
+    <span style="cursor:pointer; margin-left:6px;" onclick="eliminarCategoriaLibre('${c}')">✕</span></span>`).join('');
+}
+
+function diasRestantes(fechaFin) {
+  if (!fechaFin) return null;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fin = new Date(fechaFin + 'T00:00:00');
+  return Math.round((fin - hoy) / 86400000);
+}
+
+function guardarActividad() {
+  const id = document.getElementById('actividadId').value;
+  const nombre = document.getElementById('actNombre').value.trim();
+  const categoria = document.getElementById('actCategoria').value.trim();
+  const estado = document.getElementById('actEstado').value;
+  const importancia = document.getElementById('actImportancia').value;
+  const fechaInicio = document.getElementById('actFechaInicio').value;
+  const fechaFin = document.getElementById('actFechaFin').value;
+  const valorRaw = document.getElementById('actValor').value;
+  const valor = valorRaw === '' ? null : parseFloat(valorRaw);
+  const observacion = document.getElementById('actObservacion').value.trim();
+
+  if (!nombre || !fechaFin) {
+    alert('Completa al menos: nombre de la actividad y fecha límite/vencimiento.');
+    return;
+  }
+
+  if (categoria) {
+    const pres = cargarPresupuestos();
+    const catsLibres = cargarCategoriasLibres();
+    if (!(categoria in pres) && !catsLibres.includes(categoria)) {
+      catsLibres.push(categoria);
+      guardarCategoriasLibresDB(catsLibres);
+    }
+  }
+
+  let actividades = cargarActividades();
+  if (id) {
+    actividades = actividades.map(a => a.id === id ? {...a, nombre, categoria, estado, importancia, fechaInicio, fechaFin, valor, observacion} : a);
+  } else {
+    actividades.push({ id: Date.now().toString(), nombre, categoria, estado, importancia, fechaInicio, fechaFin, valor, observacion });
+  }
+  guardarActividadesDB(actividades);
+  cancelarEdicionAct();
+  renderActividades();
+}
+
+function editarActividad(id) {
+  const a = cargarActividades().find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('actividadId').value = a.id;
+  document.getElementById('actNombre').value = a.nombre;
+  document.getElementById('actCategoria').value = a.categoria || '';
+  document.getElementById('actEstado').value = a.estado;
+  document.getElementById('actImportancia').value = a.importancia || 'Media';
+  document.getElementById('actFechaInicio').value = a.fechaInicio || '';
+  document.getElementById('actFechaFin').value = a.fechaFin;
+  document.getElementById('actValor').value = a.valor != null ? a.valor : '';
+  document.getElementById('actObservacion').value = a.observacion || '';
+  document.getElementById('tituloFormAct').textContent = 'Editar Actividad';
+  document.getElementById('btnCancelarAct').style.display = 'inline-block';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function cancelarEdicionAct() {
+  document.getElementById('actividadId').value = '';
+  document.getElementById('actNombre').value = '';
+  document.getElementById('actCategoria').value = '';
+  document.getElementById('actEstado').value = 'Pendiente';
+  document.getElementById('actImportancia').value = 'Media';
+  document.getElementById('actFechaInicio').value = '';
+  document.getElementById('actFechaFin').value = '';
+  document.getElementById('actValor').value = '';
+  document.getElementById('actObservacion').value = '';
+  document.getElementById('tituloFormAct').textContent = 'Registrar Actividad';
+  document.getElementById('btnCancelarAct').style.display = 'none';
+}
+
+function eliminarActividad(id) {
+  if (!confirm('¿Eliminar esta actividad?')) return;
+  guardarActividadesDB(cargarActividades().filter(a => a.id !== id));
+  renderActividades();
+}
+
+function badgeEstado(estado) {
+  const cls = estado === 'Ejecutada' ? 'badge-ejecutada' : (estado === 'En ejecución' ? 'badge-ejecucion' : 'badge-pendiente');
+  return `<span class="badge ${cls}">${estado}</span>`;
+}
+
+function badgeImportancia(importancia) {
+  const cls = importancia === 'Alta' ? 'badge-alta' : (importancia === 'Baja' ? 'badge-baja' : 'badge-media');
+  return `<span class="badge ${cls}">${importancia || 'Media'}</span>`;
+}
+
+function renderListasCategoriaAct() {
+  renderChipsCategoriasLibres();
+  const pres = cargarPresupuestos();
+  const catsLibres = cargarCategoriasLibres();
+  const actividades = cargarActividades();
+  const catsPres = Object.keys(pres);
+  const catsAct = actividades.map(a => a.categoria).filter(c => c);
+  const todas = Array.from(new Set([...catsPres, ...catsLibres, ...catsAct])).sort();
+
+  document.getElementById('listaCategoriasAct').innerHTML = todas.map(c => `<option value="${c}"></option>`).join('');
+
+  const selFiltro = document.getElementById('filtroCategoriaAct');
+  const prev = selFiltro.value;
+  selFiltro.innerHTML = '<option value="">Todas</option>' + todas.map(c => `<option value="${c}">${c}</option>`).join('');
+  if (todas.includes(prev)) selFiltro.value = prev;
+}
+
+function renderAlertas() {
+  const actividades = cargarActividades().filter(a => a.estado !== 'Ejecutada');
+  const vencidas = [];
+  const proximas = [];
+
+  actividades.forEach(a => {
+    const dias = diasRestantes(a.fechaFin);
+    if (dias === null) return;
+    if (dias < 0) vencidas.push({...a, dias});
+    else if (dias <= DIAS_ALERTA) proximas.push({...a, dias});
+  });
+
+  vencidas.sort((x,y) => x.dias - y.dias);
+  proximas.sort((x,y) => x.dias - y.dias);
+
+  const cont = document.getElementById('alertasContenido');
+  if (vencidas.length === 0 && proximas.length === 0) {
+    cont.innerHTML = '<p style="color:#2e7d32;">No hay actividades vencidas ni próximas a vencer. Todo en orden.</p>';
+    return;
+  }
+
+  let html = '';
+  if (vencidas.length > 0) {
+    html += `<div class="alerta-box alerta-roja"><strong>⚠ Vencidas / pago pendiente atrasado (${vencidas.length})</strong><ul>` +
+      vencidas.map(a => `<li><strong>${a.nombre}</strong> ${a.categoria ? '(' + a.categoria + ')' : ''} — venció hace ${Math.abs(a.dias)} día(s) (${a.fechaFin})${a.valor != null ? ' — ' + formatoMoneda(a.valor) : ''}</li>`).join('') +
+      '</ul></div>';
+  }
+  if (proximas.length > 0) {
+    html += `<div class="alerta-box alerta-amarilla"><strong>⏰ Próximas a vencer en los próximos ${DIAS_ALERTA} días (${proximas.length})</strong><ul>` +
+      proximas.map(a => `<li><strong>${a.nombre}</strong> ${a.categoria ? '(' + a.categoria + ')' : ''} — ${a.dias === 0 ? 'vence hoy' : 'vence en ' + a.dias + ' día(s)'} (${a.fechaFin})${a.valor != null ? ' — ' + formatoMoneda(a.valor) : ''}</li>`).join('') +
+      '</ul></div>';
+  }
+  cont.innerHTML = html;
+}
+
+function renderActividades() {
+  renderListasCategoriaAct();
+  renderAlertas();
+
+  const actividades = cargarActividades();
+  const filtroEstado = document.getElementById('filtroEstadoAct').value;
+  const filtroCat = document.getElementById('filtroCategoriaAct').value;
+  const filtroImportancia = document.getElementById('filtroImportanciaAct').value;
+  const filtroTexto = document.getElementById('filtroTextoAct').value.toLowerCase();
+
+  let filtradas = actividades.filter(a => {
+    if (filtroEstado && a.estado !== filtroEstado) return false;
+    if (filtroCat && a.categoria !== filtroCat) return false;
+    if (filtroImportancia && (a.importancia || 'Media') !== filtroImportancia) return false;
+    if (filtroTexto) {
+      const texto = (a.nombre + ' ' + (a.observacion||'')).toLowerCase();
+      if (!texto.includes(filtroTexto)) return false;
+    }
+    return true;
+  });
+
+  filtradas = filtradas.map(a => ({...a, dias: diasRestantes(a.fechaFin)}))
+    .sort((x,y) => {
+      if (x.estado === 'Ejecutada' && y.estado !== 'Ejecutada') return 1;
+      if (y.estado === 'Ejecutada' && x.estado !== 'Ejecutada') return -1;
+      return (x.dias ?? 9999) - (y.dias ?? 9999);
+    });
+
+  const tbody = document.getElementById('cuerpoActividades');
+  if (filtradas.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#777;">No hay actividades que coincidan.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtradas.map(a => {
+    let filaClase = '';
+    let diasTexto = '-';
+    if (a.estado !== 'Ejecutada' && a.dias !== null) {
+      if (a.dias < 0) { filaClase = 'fila-vencida'; diasTexto = `Vencida hace ${Math.abs(a.dias)} d.`; }
+      else if (a.dias <= DIAS_ALERTA) { filaClase = 'fila-proxima'; diasTexto = a.dias === 0 ? 'Vence hoy' : `${a.dias} d. restantes`; }
+      else { diasTexto = `${a.dias} d. restantes`; }
+    } else if (a.estado === 'Ejecutada') {
+      diasTexto = '—';
+    }
+    return `<tr class="${filaClase}">
+      <td>${a.nombre}</td>
+      <td>${a.categoria || '-'}</td>
+      <td>${badgeEstado(a.estado)}</td>
+      <td>${badgeImportancia(a.importancia)}</td>
+      <td>${a.fechaInicio || '-'}</td>
+      <td>${a.fechaFin}</td>
+      <td>${a.valor != null ? formatoMoneda(a.valor) : '-'}</td>
+      <td>${diasTexto}</td>
+      <td>${a.observacion || ''}</td>
+      <td>
+        <button class="btn-edit" onclick="editarActividad('${a.id}')">Editar</button>
+        <button class="btn-danger" onclick="eliminarActividad('${a.id}')">Eliminar</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function exportarActividadesExcel() {
+  const actividades = cargarActividades();
+  if (actividades.length === 0) { alert('No hay actividades para exportar.'); return; }
+  const columnas = ['Actividad', 'Categoría', 'Estado', 'Importancia', 'Inicio', 'Vence', 'Valor Estimado', 'Observación'];
+  const filas = actividades
+    .map(a => ({...a, dias: diasRestantes(a.fechaFin)}))
+    .sort((x,y) => (x.dias ?? 9999) - (y.dias ?? 9999))
+    .map(a => [a.nombre, a.categoria || '-', a.estado, a.importancia || 'Media', a.fechaInicio || '-', a.fechaFin, a.valor != null ? a.valor : 0, a.observacion || '']);
+
+  const wb = XLSX.utils.book_new();
+  const ws = hojaConEncabezado('Reporte de Seguimiento de Actividades', `${nombreAdminActual()} — Generado el ${fechaHoyTexto()} — ordenado por proximidad de vencimiento`, columnas, filas, [6]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Actividades');
+  descargarLibro(wb, 'Reporte_Actividades_' + nombreAdminActual().replace(/\s+/g,'_') + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+
+// ---------- Dashboard ----------
+function inicioFinPeriodo(periodo) {
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  let inicio, fin;
+  if (periodo === 'semana') {
+    const diaSemana = (hoy.getDay() + 6) % 7;
+    inicio = new Date(hoy); inicio.setDate(hoy.getDate() - diaSemana);
+    fin = new Date(inicio); fin.setDate(inicio.getDate() + 6);
+  } else if (periodo === 'mes') {
+    inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+  } else if (periodo === 'anio') {
+    inicio = new Date(hoy.getFullYear(), 0, 1);
+    fin = new Date(hoy.getFullYear(), 11, 31);
+  } else {
+    return { inicio: null, fin: null };
+  }
+  return { inicio, fin };
+}
+
+function fechaEnRango(fechaStr, inicio, fin) {
+  if (!inicio || !fin) return true;
+  if (!fechaStr) return false;
+  const f = new Date(fechaStr + 'T00:00:00');
+  return f >= inicio && f <= fin;
+}
+
+function cambiarPeriodo(periodo) {
+  periodoActual = periodo;
+  ['btnPerSemana','btnPerMes','btnPerAnio','btnPerTodo'].forEach(id => document.getElementById(id).classList.remove('active'));
+  const map = { semana: 'btnPerSemana', mes: 'btnPerMes', anio: 'btnPerAnio', todo: 'btnPerTodo' };
+  document.getElementById(map[periodo]).classList.add('active');
+  renderDashboard();
+}
+
+function actividadesDelPeriodo() {
+  const { inicio, fin } = inicioFinPeriodo(periodoActual);
+  return cargarActividades().filter(a => fechaEnRango(a.fechaFin, inicio, fin));
+}
+
+function renderBarraHorizontal(contenedorId, datos, colores) {
+  const cont = document.getElementById(contenedorId);
+  const max = Math.max(1, ...Object.values(datos));
+  cont.innerHTML = Object.entries(datos).map(([clave, valor]) => {
+    const pct = (valor / max) * 100;
+    const color = colores[clave] || '#1b6fb8';
+    return `<div class="barra-h-wrap">
+      <div class="barra-h-label"><span>${clave}</span><span>${valor}</span></div>
+      <div class="barra-h-bg"><div class="barra-h-fill" style="width:${pct}%; background:${color};">&nbsp;</div></div>
+    </div>`;
+  }).join('') || '<p style="color:#777;">Sin datos en este periodo.</p>';
+}
+
+function renderDashboard() {
+  const { inicio, fin } = inicioFinPeriodo(periodoActual);
+  const textoRango = document.getElementById('rangoPeriodoTexto');
+  if (inicio && fin) {
+    textoRango.textContent = `Mostrando actividades con vencimiento entre ${inicio.toLocaleDateString('es-CO')} y ${fin.toLocaleDateString('es-CO')}.`;
+  } else {
+    textoRango.textContent = 'Mostrando todas las actividades registradas, sin filtro de fecha.';
+  }
+
+  const actividades = actividadesDelPeriodo();
+  const total = actividades.length;
+  const ejecutadas = actividades.filter(a => a.estado === 'Ejecutada').length;
+  const enEjecucion = actividades.filter(a => a.estado === 'En ejecución').length;
+  const pendientes = actividades.filter(a => a.estado === 'Pendiente').length;
+  const vencidas = actividades.filter(a => a.estado !== 'Ejecutada' && diasRestantes(a.fechaFin) !== null && diasRestantes(a.fechaFin) < 0).length;
+
+  document.getElementById('kpiTotal').textContent = total;
+  document.getElementById('kpiEjecutadas').textContent = ejecutadas;
+  document.getElementById('kpiEnEjecucion').textContent = enEjecucion;
+  document.getElementById('kpiPendientes').textContent = pendientes;
+  document.getElementById('kpiVencidas').textContent = vencidas;
+
+  const porImportancia = { Alta: 0, Media: 0, Baja: 0 };
+  actividades.forEach(a => { porImportancia[a.importancia || 'Media']++; });
+  renderBarraHorizontal('graficoImportancia', porImportancia, { Alta: '#c62828', Media: '#f0ad4e', Baja: '#5bc0de' });
+
+  const porCategoria = {};
+  actividades.forEach(a => { const c = a.categoria || 'Sin categoría'; porCategoria[c] = (porCategoria[c] || 0) + 1; });
+  renderBarraHorizontal('graficoCategoria', porCategoria, {});
+}
+
+function exportarDashboardExcel() {
+  const actividades = actividadesDelPeriodo();
+  if (actividades.length === 0) { alert('No hay actividades en el periodo seleccionado para exportar.'); return; }
+
+  const total = actividades.length;
+  const ejecutadas = actividades.filter(a => a.estado === 'Ejecutada').length;
+  const enEjecucion = actividades.filter(a => a.estado === 'En ejecución').length;
+  const pendientes = actividades.filter(a => a.estado === 'Pendiente').length;
+  const vencidas = actividades.filter(a => a.estado !== 'Ejecutada' && diasRestantes(a.fechaFin) !== null && diasRestantes(a.fechaFin) < 0).length;
+
+  const columnasResumen = ['Indicador', 'Valor'];
+  const filasResumen = [
+    ['Total de actividades', total],
+    ['Ejecutadas', ejecutadas],
+    ['En ejecución', enEjecucion],
+    ['Pendientes', pendientes],
+    ['Vencidas', vencidas]
+  ];
+
+  const porImportancia = { Alta: 0, Media: 0, Baja: 0 };
+  actividades.forEach(a => { porImportancia[a.importancia || 'Media']++; });
+  Object.entries(porImportancia).forEach(([k,v]) => filasResumen.push(['Importancia: ' + k, v]));
+
+  const periodoNombre = { semana: 'Esta semana', mes: 'Este mes', anio: 'Este año', todo: 'Todo el historial' }[periodoActual];
+  const wb = XLSX.utils.book_new();
+  const wsResumen = hojaConEncabezado('Dashboard de Actividades', `${nombreAdminActual()} — Periodo: ${periodoNombre} — Generado el ${fechaHoyTexto()}`, columnasResumen, filasResumen, []);
+  XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+  const columnasDetalle = ['Actividad', 'Categoría', 'Estado', 'Importancia', 'Inicio', 'Vence', 'Valor Estimado'];
+  const filasDetalle = actividades.map(a => [a.nombre, a.categoria || '-', a.estado, a.importancia || 'Media', a.fechaInicio || '-', a.fechaFin, a.valor != null ? a.valor : 0]);
+  const wsDetalle = hojaConEncabezado('Detalle de Actividades del Periodo', periodoNombre, columnasDetalle, filasDetalle, [6]);
+  XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle');
+
+  descargarLibro(wb, 'Dashboard_' + nombreAdminActual().replace(/\s+/g,'_') + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+
+function renderTodo() {
+  renderSelectorAdmin();
+  renderCategoriasSelects();
+  renderPresupuesto();
+  renderFacturas();
+  renderActividades();
+  if (document.getElementById('tabDashboard').classList.contains('active')) renderDashboard();
+}
+
+renderTodo();
+</script>
+</body>
+</html>
