@@ -75,15 +75,33 @@
   .admin-bar .btn-admin { background:#2e7d32; color:#fff; }
   .admin-bar .btn-admin-edit { background:#f0ad4e; color:#fff; }
   .admin-bar .btn-admin-del { background:#d9534f; color:#fff; }
+  #loginOverlay { position:fixed; top:0; left:0; width:100%; height:100%; background:#1b3a57; display:flex; align-items:center; justify-content:center; z-index:9999; }
+  .login-box { background:#fff; border-radius:10px; padding:35px 30px; width:320px; box-shadow:0 4px 20px rgba(0,0,0,.3); text-align:center; }
+  .login-box h2 { border:none; padding:0; margin-bottom:5px; }
+  .login-box p.hint { color:#777; font-size:12px; margin-top:0; margin-bottom:20px; }
+  .login-box input { margin-bottom:10px; }
+  .login-box .btn-primary { width:100%; margin-top:8px; }
+  .login-error { color:#c62828; font-size:13px; margin-top:8px; min-height:16px; }
 </style>
 </head>
 <body>
+<div id="loginOverlay">
+  <div class="login-box">
+    <h2>Acceso Administrador</h2>
+    <p class="hint">Ingresa tus credenciales para continuar</p>
+    <input type="text" id="loginUsuario" placeholder="Usuario" autocomplete="username">
+    <input type="password" id="loginPassword" placeholder="Contraseña" autocomplete="current-password">
+    <button class="btn-primary" onclick="intentarLogin()">Ingresar</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
 <div class="admin-bar">
   <label>Administración / Conjunto activo:</label>
   <select id="selAdminActivo" onchange="seleccionarAdmin()"></select>
   <button class="btn-admin" onclick="crearAdmin()">+ Nueva Administración</button>
   <button class="btn-admin-edit" onclick="renombrarAdmin()">Renombrar</button>
   <button class="btn-admin-del" onclick="eliminarAdmin()">Eliminar</button>
+  <button class="btn-admin-del" style="margin-left:auto;" onclick="cerrarSesion()">Cerrar sesión</button>
 </div>
 <div class="tabs">
   <button class="tab-btn active" id="btnTabFacturas" onclick="cambiarTab('facturas')">Facturas y Presupuesto</button>
@@ -190,7 +208,6 @@
     </table>
   </div>
 </div>
-
 <div class="container tab-content" id="tabActividades">
   <h1>Seguimiento de Actividades</h1>
 
@@ -303,7 +320,6 @@
     </table>
   </div>
 </div>
-
 <div class="container tab-content" id="tabDashboard">
   <h1>Dashboard de Actividades</h1>
 
@@ -345,6 +361,44 @@
 </div>
 
 <script>
+// ---------- Autenticación básica (protección de acceso, no seguridad de nivel servidor) ----------
+const LOGIN_USUARIO = 'admin';
+const LOGIN_PASSWORD = 'admin123';
+const LOGIN_SESION_KEY = 'sesion_iniciada_v1';
+
+function verificarSesion() {
+  if (sessionStorage.getItem(LOGIN_SESION_KEY) === '1') {
+    document.getElementById('loginOverlay').style.display = 'none';
+  } else {
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('loginUsuario').focus();
+  }
+}
+
+function intentarLogin() {
+  const usuario = document.getElementById('loginUsuario').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const error = document.getElementById('loginError');
+  if (usuario === LOGIN_USUARIO && password === LOGIN_PASSWORD) {
+    sessionStorage.setItem(LOGIN_SESION_KEY, '1');
+    document.getElementById('loginOverlay').style.display = 'none';
+    error.textContent = '';
+  } else {
+    error.textContent = 'Usuario o contraseña incorrectos.';
+    document.getElementById('loginPassword').value = '';
+  }
+}
+
+function cerrarSesion() {
+  sessionStorage.removeItem(LOGIN_SESION_KEY);
+  verificarSesion();
+}
+
+document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') intentarLogin();
+});
+verificarSesion();
+
 const ADMINS_KEY = 'administraciones_v1';
 const ADMIN_ACTUAL_KEY = 'admin_actual_v1';
 const DIAS_ALERTA = 7;
