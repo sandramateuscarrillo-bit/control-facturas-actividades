@@ -56,6 +56,10 @@
   .alerta-box li { margin-bottom:4px; }
   .fila-vencida { background:#fdecea !important; }
   .fila-proxima { background:#fff8e1 !important; }
+  .alerta-item { cursor:pointer; border-radius:4px; padding:2px 4px; transition:background .15s; }
+  .alerta-item:hover { background:rgba(0,0,0,.06); text-decoration:underline; }
+  .fila-resaltada { animation:destello 2.5s ease; box-shadow:0 0 0 3px #1b6fb8 inset; }
+  @keyframes destello { 0%{ background:#bcdcff !important; } 60%{ background:#dcecff !important; } 100%{ background:transparent; } }
   .badge-alta { background:#c62828; }
   .badge-media { background:#f0ad4e; }
   .badge-baja { background:#5bc0de; }
@@ -296,6 +300,15 @@
           <option value="Pendiente">Pendiente</option>
           <option value="En ejecución">En ejecución</option>
           <option value="Ejecutada">Ejecutada</option>
+        </select>
+      </div>
+      <div>
+        <label>Filtrar por vencimiento</label>
+        <select id="filtroVencimientoAct" onchange="renderActividades()">
+          <option value="">Todas</option>
+          <option value="vencidas">Solo vencidas</option>
+          <option value="proximas">Solo próximas a vencer</option>
+          <option value="vencidas_proximas">Vencidas + próximas</option>
         </select>
       </div>
       <div>
@@ -1076,15 +1089,32 @@ function renderAlertas() {
   let html = '';
   if (vencidas.length > 0) {
     html += `<div class="alerta-box alerta-roja"><strong>⚠ Vencidas / pago pendiente atrasado (${vencidas.length})</strong><ul>` +
-      vencidas.map(a => `<li><strong>${a.nombre}</strong> ${a.categoria ? '(' + a.categoria + ')' : ''} — venció hace ${Math.abs(a.dias)} día(s) (${a.fechaFin})${a.valor != null ? ' — ' + formatoMoneda(a.valor) : ''}</li>`).join('') +
+      vencidas.map(a => `<li class="alerta-item" onclick="irAActividad('${a.id}')" title="Clic para ver la actividad en la tabla"><strong>${a.nombre}</strong> ${a.categoria ? '(' + a.categoria + ')' : ''} — venció hace ${Math.abs(a.dias)} día(s) (${a.fechaFin})${a.valor != null ? ' — ' + formatoMoneda(a.valor) : ''}</li>`).join('') +
       '</ul></div>';
   }
   if (proximas.length > 0) {
     html += `<div class="alerta-box alerta-amarilla"><strong>⏰ Próximas a vencer en los próximos ${DIAS_ALERTA} días (${proximas.length})</strong><ul>` +
-      proximas.map(a => `<li><strong>${a.nombre}</strong> ${a.categoria ? '(' + a.categoria + ')' : ''} — ${a.dias === 0 ? 'vence hoy' : 'vence en ' + a.dias + ' día(s)'} (${a.fechaFin})${a.valor != null ? ' — ' + formatoMoneda(a.valor) : ''}</li>`).join('') +
+      proximas.map(a => `<li class="alerta-item" onclick="irAActividad('${a.id}')" title="Clic para ver la actividad en la tabla"><strong>${a.nombre}</strong> ${a.categoria ? '(' + a.categoria + ')' : ''} — ${a.dias === 0 ? 'vence hoy' : 'vence en ' + a.dias + ' día(s)'} (${a.fechaFin})${a.valor != null ? ' — ' + formatoMoneda(a.valor) : ''}</li>`).join('') +
       '</ul></div>';
   }
   cont.innerHTML = html;
+}
+
+// Al hacer clic en una alerta, lleva a la fila de esa actividad en la tabla.
+function irAActividad(id) {
+  // Quita filtros que pudieran ocultar la actividad, para asegurar que se vea.
+  document.getElementById('filtroEstadoAct').value = '';
+  document.getElementById('filtroCategoriaAct').value = '';
+  document.getElementById('filtroImportanciaAct').value = '';
+  document.getElementById('filtroVencimientoAct').value = '';
+  document.getElementById('filtroTextoAct').value = '';
+  renderActividades();
+  const fila = document.getElementById('actrow_' + id);
+  if (fila) {
+    fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    fila.classList.add('fila-resaltada');
+    setTimeout(() => fila.classList.remove('fila-resaltada'), 2500);
+  }
 }
 
 function renderActividades() {
@@ -1095,12 +1125,21 @@ function renderActividades() {
   const filtroEstado = document.getElementById('filtroEstadoAct').value;
   const filtroCat = document.getElementById('filtroCategoriaAct').value;
   const filtroImportancia = document.getElementById('filtroImportanciaAct').value;
+  const filtroVencimiento = document.getElementById('filtroVencimientoAct').value;
   const filtroTexto = document.getElementById('filtroTextoAct').value.toLowerCase();
 
   let filtradas = actividades.filter(a => {
     if (filtroEstado && a.estado !== filtroEstado) return false;
     if (filtroCat && a.categoria !== filtroCat) return false;
     if (filtroImportancia && (a.importancia || 'Media') !== filtroImportancia) return false;
+    if (filtroVencimiento) {
+      const dias = diasRestantes(a.fechaFin);
+      const esVencida = a.estado !== 'Ejecutada' && dias !== null && dias < 0;
+      const esProxima = a.estado !== 'Ejecutada' && dias !== null && dias >= 0 && dias <= DIAS_ALERTA;
+      if (filtroVencimiento === 'vencidas' && !esVencida) return false;
+      if (filtroVencimiento === 'proximas' && !esProxima) return false;
+      if (filtroVencimiento === 'vencidas_proximas' && !(esVencida || esProxima)) return false;
+    }
     if (filtroTexto) {
       const texto = (a.nombre + ' ' + (a.observacion||'')).toLowerCase();
       if (!texto.includes(filtroTexto)) return false;
@@ -1131,7 +1170,7 @@ function renderActividades() {
     } else if (a.estado === 'Ejecutada') {
       diasTexto = '—';
     }
-    return `<tr class="${filaClase}">
+    return `<tr class="${filaClase}" id="actrow_${a.id}">
       <td>${a.nombre}</td>
       <td>${a.categoria || '-'}</td>
       <td>${badgeEstado(a.estado)}</td>
