@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <title>Control de Facturas y Presupuesto</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   * { box-sizing: border-box; font-family: Arial, sans-serif; }
   body { background:#f4f6f8; margin:0; padding:20px; color:#222; }
@@ -158,7 +160,7 @@
       </div>
       <div>
         <label>Fecha</label>
-        <input type="date" id="fecha">
+        <input id="fecha" type="date">
       </div>
     </div>
     <label>Observación</label>
@@ -208,6 +210,7 @@
     </table>
   </div>
 </div>
+
 <div class="container tab-content" id="tabActividades">
   <h1>Seguimiento de Actividades</h1>
 
@@ -320,6 +323,7 @@
     </table>
   </div>
 </div>
+
 <div class="container tab-content" id="tabDashboard">
   <h1>Dashboard de Actividades</h1>
 
@@ -361,6 +365,77 @@
 </div>
 
 <script>
+// ---------- Sincronización en la nube (Firebase / Firestore) ----------
+// Guarda todos los datos en la nube para que se vean igual en computador y celular.
+const firebaseConfig = {
+  apiKey: "AIzaSyA3--CtgtE_p3ugzgNmIix2PoFAsag-Aws",
+  authDomain: "control-facturas-9c712.firebaseapp.com",
+  projectId: "control-facturas-9c712",
+  storageBucket: "control-facturas-9c712.firebasestorage.app",
+  messagingSenderId: "18861444868",
+  appId: "1:18861444868:web:8a56bb734df9139952ca51"
+};
+
+let _db = null, _docEstado = null, _nubeLista = false, _aplicandoRemoto = false, _pushTimer = null;
+const _origSet = localStorage.setItem.bind(localStorage);
+const _origRemove = localStorage.removeItem.bind(localStorage);
+
+function _snapshotLocal() {
+  const o = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    o[k] = localStorage.getItem(k);
+  }
+  return o;
+}
+
+function _programarPush() {
+  if (!_nubeLista) return;
+  clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(() => {
+    if (!_docEstado) return;
+    _docEstado.set({ datos: _snapshotLocal(), actualizado: Date.now() })
+      .catch(e => console.warn('Error al guardar en la nube:', e));
+  }, 700);
+}
+
+// Intercepta las escrituras a localStorage para replicarlas en la nube.
+localStorage.setItem = function (k, v) { _origSet(k, v); if (!_aplicandoRemoto) _programarPush(); };
+localStorage.removeItem = function (k) { _origRemove(k); if (!_aplicandoRemoto) _programarPush(); };
+
+function _aplicarRemoto(datos) {
+  _aplicandoRemoto = true;
+  try {
+    Object.keys(datos || {}).forEach(k => _origSet(k, datos[k]));
+  } finally {
+    _aplicandoRemoto = false;
+  }
+}
+
+function iniciarSyncNube() {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    _db = firebase.firestore();
+    _docEstado = _db.collection('appdata').doc('estado');
+    _docEstado.onSnapshot(
+      snap => {
+        if (snap.exists && snap.data() && snap.data().datos) {
+          _aplicarRemoto(snap.data().datos);
+        }
+        _nubeLista = true;
+        if (typeof renderTodo === 'function' && document.getElementById('selAdminActivo')) {
+          renderTodo();
+        }
+      },
+      err => { console.warn('Sin conexión a la nube (se usará solo este dispositivo):', err); _nubeLista = true; }
+    );
+  } catch (e) {
+    console.warn('No se pudo iniciar la sincronización en la nube:', e);
+    _nubeLista = true;
+  }
+}
+iniciarSyncNube();
+
 // ---------- Autenticación básica (protección de acceso, no seguridad de nivel servidor) ----------
 const LOGIN_USUARIO = 'admin';
 const LOGIN_PASSWORD = 'admin123';
@@ -1007,7 +1082,7 @@ function inicioFinPeriodo(periodo) {
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   let inicio, fin;
   if (periodo === 'semana') {
-    const diaSemana = (hoy.getDay() + 6) % 7;
+    const diaSemana = (hoy.getDay() + 6) % 7; // lunes=0
     inicio = new Date(hoy); inicio.setDate(hoy.getDate() - diaSemana);
     fin = new Date(inicio); fin.setDate(inicio.getDate() + 6);
   } else if (periodo === 'mes') {
