@@ -103,6 +103,9 @@
   <button class="btn-admin" onclick="crearAdmin()">+ Nueva Administración</button>
   <button class="btn-admin-edit" onclick="renombrarAdmin()">Renombrar</button>
   <button class="btn-admin-del" onclick="eliminarAdmin()">Eliminar</button>
+  <button class="btn-admin" style="background:#0b7285;" onclick="exportarRespaldo()">⬇ Exportar respaldo</button>
+  <button class="btn-admin" style="background:#5f3dc4;" onclick="document.getElementById('inputImportar').click()">⬆ Importar respaldo</button>
+  <input type="file" id="inputImportar" accept="application/json,.json" style="display:none" onchange="importarRespaldo(event)">
   <button class="btn-admin-del" style="margin-left:auto;" onclick="cerrarSesion()">Cerrar sesión</button>
 </div>
 <div class="tabs">
@@ -547,6 +550,69 @@ function crearAdmin() {
   guardarAdminsDB(admins);
   localStorage.setItem(ADMIN_ACTUAL_KEY, id);
   renderTodo();
+}
+
+// ---------- Exportar / Importar respaldo (transferir conjuntos entre perfiles/dispositivos) ----------
+function exportarRespaldo() {
+  const admins = cargarAdmins();
+  const actual = getAdminActualId();
+  const admin = admins.find(a => a.id === actual) || { nombre: 'Conjunto' };
+  const respaldo = {
+    tipo: 'respaldo_control_facturas',
+    version: 1,
+    exportado: new Date().toISOString(),
+    nombre: admin.nombre,
+    datos: {
+      facturas: JSON.parse(localStorage.getItem('facturas_db_v1__' + actual) || '[]'),
+      presupuestos: JSON.parse(localStorage.getItem('presupuestos_db_v1__' + actual) || '{}'),
+      actividades: JSON.parse(localStorage.getItem('actividades_db_v1__' + actual) || '[]'),
+      categorias_libres: JSON.parse(localStorage.getItem('categorias_libres_v1__' + actual) || '[]')
+    }
+  };
+  const blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'respaldo_' + (admin.nombre || 'conjunto').replace(/\s+/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importarRespaldo(evento) {
+  const archivo = evento.target.files[0];
+  if (!archivo) return;
+  const lector = new FileReader();
+  lector.onload = function (e) {
+    try {
+      const r = JSON.parse(e.target.result);
+      if (!r || r.tipo !== 'respaldo_control_facturas' || !r.datos) {
+        alert('El archivo no es un respaldo válido de esta aplicación.');
+        return;
+      }
+      const nombreBase = r.nombre || 'Conjunto importado';
+      const nombre = prompt('Nombre para el conjunto importado:', nombreBase + ' (importado)');
+      if (!nombre || !nombre.trim()) return;
+      // Nueva identidad única -> nunca pisa datos existentes.
+      const id = 'admin_' + Date.now();
+      const admins = cargarAdmins();
+      admins.push({ id, nombre: nombre.trim() });
+      guardarAdminsDB(admins);
+      localStorage.setItem('facturas_db_v1__' + id, JSON.stringify(r.datos.facturas || []));
+      localStorage.setItem('presupuestos_db_v1__' + id, JSON.stringify(r.datos.presupuestos || {}));
+      localStorage.setItem('actividades_db_v1__' + id, JSON.stringify(r.datos.actividades || []));
+      localStorage.setItem('categorias_libres_v1__' + id, JSON.stringify(r.datos.categorias_libres || []));
+      localStorage.setItem(ADMIN_ACTUAL_KEY, id);
+      renderTodo();
+      alert('Respaldo importado como el conjunto "' + nombre.trim() + '". Ya puedes elegirlo en el selector de arriba.');
+    } catch (err) {
+      alert('No se pudo leer el archivo: ' + err.message);
+    } finally {
+      evento.target.value = '';
+    }
+  };
+  lector.readAsText(archivo);
 }
 
 function renombrarAdmin() {
