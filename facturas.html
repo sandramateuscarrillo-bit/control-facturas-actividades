@@ -403,10 +403,27 @@ function _programarPush() {
 localStorage.setItem = function (k, v) { _origSet(k, v); if (!_aplicandoRemoto) _programarPush(); };
 localStorage.removeItem = function (k) { _origRemove(k); if (!_aplicandoRemoto) _programarPush(); };
 
+// Un valor se considera "vacío" si no aporta datos reales.
+function _esVacio(v) {
+  return v == null || v === '' || v === '[]' || v === '{}' || v === 'null';
+}
+
+// Combina nube + local SIN perder datos: para cada clave gana el valor con
+// contenido. Así un dispositivo vacío nunca borra la información de otro.
 function _aplicarRemoto(datos) {
   _aplicandoRemoto = true;
   try {
-    Object.keys(datos || {}).forEach(k => _origSet(k, datos[k]));
+    const remoto = datos || {};
+    const claves = new Set(Object.keys(remoto));
+    for (let i = 0; i < localStorage.length; i++) claves.add(localStorage.key(i));
+    claves.forEach(k => {
+      const rv = remoto[k];
+      const lv = localStorage.getItem(k);
+      if (!_esVacio(rv)) {
+        _origSet(k, rv);            // la nube tiene datos -> se adoptan
+      }
+      // si la nube está vacía pero local tiene datos, se conserva local.
+    });
   } finally {
     _aplicandoRemoto = false;
   }
@@ -419,10 +436,14 @@ function iniciarSyncNube() {
     _docEstado = _db.collection('appdata').doc('estado');
     _docEstado.onSnapshot(
       snap => {
-        if (snap.exists && snap.data() && snap.data().datos) {
-          _aplicarRemoto(snap.data().datos);
-        }
+        const datos = (snap.exists && snap.data()) ? (snap.data().datos || {}) : {};
+        _aplicarRemoto(datos);
         _nubeLista = true;
+        // Si tras combinar el estado local difiere de la nube, súbelo
+        // (así el dispositivo con datos reales los publica en la nube).
+        if (JSON.stringify(_snapshotLocal()) !== JSON.stringify(datos)) {
+          _programarPush();
+        }
         if (typeof renderTodo === 'function' && document.getElementById('selAdminActivo')) {
           renderTodo();
         }
