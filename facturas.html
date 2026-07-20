@@ -254,6 +254,10 @@
         <datalist id="listaCategoriasAct"></datalist>
       </div>
       <div>
+        <label>Casa / Apartamento</label>
+        <input id="actUnidad" placeholder="Ej: Casa 91, Apto 704, Local 3...">
+      </div>
+      <div>
         <label>Estado</label>
         <select id="actEstado">
           <option value="Pendiente">Pendiente</option>
@@ -334,7 +338,7 @@
     </div>
     <small class="hint">Ordenadas automáticamente por las que están más cerca de vencer.</small>
     <table>
-      <thead><tr><th>Actividad</th><th>Categoría</th><th>Estado</th><th>Importancia</th><th>Inicio</th><th>Vence</th><th>Valor est.</th><th>Días restantes</th><th>Observación</th><th>Acciones</th></tr></thead>
+      <thead><tr><th>Actividad</th><th>Categoría</th><th>Casa/Apto</th><th>Estado</th><th>Importancia</th><th>Inicio</th><th>Vence</th><th>Valor est.</th><th>Días restantes</th><th>Observación</th><th>Acciones</th></tr></thead>
       <tbody id="cuerpoActividades"></tbody>
     </table>
   </div>
@@ -392,73 +396,93 @@ const firebaseConfig = {
   appId: "1:18861444868:web:8a56bb734df9139952ca51"
 };
 
-let _db = null, _docEstado = null, _nubeLista = false, _aplicandoRemoto = false, _pushTimer = null;
+// ARQUITECTURA ROBUSTA: cada clave de datos se guarda en su PROPIO documento
+// dentro de la colección "kv". Ventajas:
+//  - Nunca choca con el límite de 1 MB por documento de Firestore.
+//  - Al cambiar algo, solo se sube ESE dato (escritura pequeña y rápida).
+//  - Menor riesgo de bloqueos o lentitud a medida que crece la información.
+let _db = null, _col = null, _nubeLista = false, _aplicandoRemoto = false, _pushTimer = null;
+let _primeraCarga = true;
+const _cambios = new Set();        // claves pendientes de subir
+const _clavesNube = new Set();     // claves que ya existen en la nube
 const _origSet = localStorage.setItem.bind(localStorage);
 const _origRemove = localStorage.removeItem.bind(localStorage);
 
-function _snapshotLocal() {
-  const o = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    o[k] = localStorage.getItem(k);
-  }
-  return o;
+// Solo se sincronizan las claves propias de la aplicación.
+function _esClaveApp(k) {
+  return k === 'administraciones_v1' || k === 'admin_actual_v1' || k === 'migracion_admins_v1'
+    || /^(facturas_db_v1|presupuestos_db_v1|actividades_db_v1|categorias_libres_v1)__/.test(k);
 }
 
 function _programarPush() {
-  if (!_nubeLista) return;
+  if (!_nubeLista || !_col) return;
   clearTimeout(_pushTimer);
-  _pushTimer = setTimeout(() => {
-    if (!_docEstado) return;
-    _docEstado.set({ datos: _snapshotLocal(), actualizado: Date.now() })
-      .catch(e => console.warn('Error al guardar en la nube:', e));
-  }, 700);
+  _pushTimer = setTimeout(_subirCambios, 600);
+}
+
+// Sube solo las claves que cambiaron, en un lote (batch) eficiente.
+function _subirCambios() {
+  if (!_col || !_db) return;
+  const claves = [...(_cambios)];
+  _cambios.clear();
+  if (claves.length === 0) return;
+  try {
+    const lote = _db.batch();
+    claves.forEach(k => {
+      const ref = _col.doc(k);
+      const v = localStorage.getItem(k);
+      if (v === null) lote.delete(ref);
+      else lote.set(ref, { v: v, t: Date.now() });
+    });
+    lote.commit().catch(e => console.warn('Error al guardar en la nube (se reintentará):', e));
+  } catch (e) {
+    console.warn('Error al preparar el guardado en la nube:', e);
+  }
 }
 
 // Intercepta las escrituras a localStorage para replicarlas en la nube.
-localStorage.setItem = function (k, v) { _origSet(k, v); if (!_aplicandoRemoto) _programarPush(); };
-localStorage.removeItem = function (k) { _origRemove(k); if (!_aplicandoRemoto) _programarPush(); };
-
-// Un valor se considera "vacío" si no aporta datos reales.
-function _esVacio(v) {
-  return v == null || v === '' || v === '[]' || v === '{}' || v === 'null';
-}
-
-// Combina nube + local SIN perder datos: para cada clave gana el valor con
-// contenido. Así un dispositivo vacío nunca borra la información de otro.
-function _aplicarRemoto(datos) {
-  _aplicandoRemoto = true;
-  try {
-    const remoto = datos || {};
-    const claves = new Set(Object.keys(remoto));
-    for (let i = 0; i < localStorage.length; i++) claves.add(localStorage.key(i));
-    claves.forEach(k => {
-      const rv = remoto[k];
-      const lv = localStorage.getItem(k);
-      if (!_esVacio(rv)) {
-        _origSet(k, rv);            // la nube tiene datos -> se adoptan
-      }
-      // si la nube está vacía pero local tiene datos, se conserva local.
-    });
-  } finally {
-    _aplicandoRemoto = false;
-  }
-}
+localStorage.setItem = function (k, v) {
+  _origSet(k, v);
+  if (!_aplicandoRemoto && _esClaveApp(k)) { _cambios.add(k); _programarPush(); }
+};
+localStorage.removeItem = function (k) {
+  _origRemove(k);
+  if (!_aplicandoRemoto && _esClaveApp(k)) { _cambios.add(k); _programarPush(); }
+};
 
 function iniciarSyncNube() {
   try {
     firebase.initializeApp(firebaseConfig);
     _db = firebase.firestore();
-    _docEstado = _db.collection('appdata').doc('estado');
-    _docEstado.onSnapshot(
+    _col = _db.collection('kv');
+    _col.onSnapshot(
       snap => {
-        const datos = (snap.exists && snap.data()) ? (snap.data().datos || {}) : {};
-        _aplicarRemoto(datos);
+        _aplicandoRemoto = true;
+        try {
+          snap.docChanges().forEach(ch => {
+            const k = ch.doc.id;
+            if (ch.type === 'removed') {
+              _clavesNube.delete(k);
+              _origRemove(k);
+            } else {
+              _clavesNube.add(k);
+              const v = ch.doc.data().v;
+              if (v != null && v !== localStorage.getItem(k)) _origSet(k, v);
+            }
+          });
+        } finally {
+          _aplicandoRemoto = false;
+        }
         _nubeLista = true;
-        // Si tras combinar el estado local difiere de la nube, súbelo
-        // (así el dispositivo con datos reales los publica en la nube).
-        if (JSON.stringify(_snapshotLocal()) !== JSON.stringify(datos)) {
-          _programarPush();
+        if (_primeraCarga) {
+          _primeraCarga = false;
+          // Sembrar en la nube las claves locales que aún no existan allí
+          // (sin pisar lo que ya está en la nube).
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (_esClaveApp(k) && !_clavesNube.has(k)) _cambios.add(k);
+          }
+          if (_cambios.size) _programarPush();
         }
         if (typeof renderTodo === 'function' && document.getElementById('selAdminActivo')) {
           renderTodo();
@@ -970,6 +994,7 @@ function guardarActividad() {
   const categoria = document.getElementById('actCategoria').value.trim();
   const estado = document.getElementById('actEstado').value;
   const importancia = document.getElementById('actImportancia').value;
+  const unidad = document.getElementById('actUnidad').value.trim();
   const fechaInicio = document.getElementById('actFechaInicio').value;
   const fechaFin = document.getElementById('actFechaFin').value;
   const valorRaw = document.getElementById('actValor').value;
@@ -992,9 +1017,9 @@ function guardarActividad() {
 
   let actividades = cargarActividades();
   if (id) {
-    actividades = actividades.map(a => a.id === id ? {...a, nombre, categoria, estado, importancia, fechaInicio, fechaFin, valor, observacion} : a);
+    actividades = actividades.map(a => a.id === id ? {...a, nombre, categoria, unidad, estado, importancia, fechaInicio, fechaFin, valor, observacion} : a);
   } else {
-    actividades.push({ id: Date.now().toString(), nombre, categoria, estado, importancia, fechaInicio, fechaFin, valor, observacion });
+    actividades.push({ id: Date.now().toString(), nombre, categoria, unidad, estado, importancia, fechaInicio, fechaFin, valor, observacion });
   }
   guardarActividadesDB(actividades);
   cancelarEdicionAct();
@@ -1007,6 +1032,7 @@ function editarActividad(id) {
   document.getElementById('actividadId').value = a.id;
   document.getElementById('actNombre').value = a.nombre;
   document.getElementById('actCategoria').value = a.categoria || '';
+  document.getElementById('actUnidad').value = a.unidad || '';
   document.getElementById('actEstado').value = a.estado;
   document.getElementById('actImportancia').value = a.importancia || 'Media';
   document.getElementById('actFechaInicio').value = a.fechaInicio || '';
@@ -1022,6 +1048,7 @@ function cancelarEdicionAct() {
   document.getElementById('actividadId').value = '';
   document.getElementById('actNombre').value = '';
   document.getElementById('actCategoria').value = '';
+  document.getElementById('actUnidad').value = '';
   document.getElementById('actEstado').value = 'Pendiente';
   document.getElementById('actImportancia').value = 'Media';
   document.getElementById('actFechaInicio').value = '';
@@ -1089,12 +1116,12 @@ function renderAlertas() {
   let html = '';
   if (vencidas.length > 0) {
     html += `<div class="alerta-box alerta-roja"><strong>⚠ Vencidas / pago pendiente atrasado (${vencidas.length})</strong><ul>` +
-      vencidas.map(a => `<li class="alerta-item" onclick="irAActividad('${a.id}')" title="Clic para ver la actividad en la tabla"><strong>${a.nombre}</strong> ${a.categoria ? '(' + a.categoria + ')' : ''} — venció hace ${Math.abs(a.dias)} día(s) (${a.fechaFin})${a.valor != null ? ' — ' + formatoMoneda(a.valor) : ''}</li>`).join('') +
+      vencidas.map(a => `<li class="alerta-item" onclick="irAActividad('${a.id}')" title="Clic para ver la actividad en la tabla"><strong>${a.nombre}</strong>${a.unidad ? ' <em>[' + a.unidad + ']</em>' : ''} ${a.categoria ? '(' + a.categoria + ')' : ''} — venció hace ${Math.abs(a.dias)} día(s) (${a.fechaFin})${a.valor != null ? ' — ' + formatoMoneda(a.valor) : ''}</li>`).join('') +
       '</ul></div>';
   }
   if (proximas.length > 0) {
     html += `<div class="alerta-box alerta-amarilla"><strong>⏰ Próximas a vencer en los próximos ${DIAS_ALERTA} días (${proximas.length})</strong><ul>` +
-      proximas.map(a => `<li class="alerta-item" onclick="irAActividad('${a.id}')" title="Clic para ver la actividad en la tabla"><strong>${a.nombre}</strong> ${a.categoria ? '(' + a.categoria + ')' : ''} — ${a.dias === 0 ? 'vence hoy' : 'vence en ' + a.dias + ' día(s)'} (${a.fechaFin})${a.valor != null ? ' — ' + formatoMoneda(a.valor) : ''}</li>`).join('') +
+      proximas.map(a => `<li class="alerta-item" onclick="irAActividad('${a.id}')" title="Clic para ver la actividad en la tabla"><strong>${a.nombre}</strong>${a.unidad ? ' <em>[' + a.unidad + ']</em>' : ''} ${a.categoria ? '(' + a.categoria + ')' : ''} — ${a.dias === 0 ? 'vence hoy' : 'vence en ' + a.dias + ' día(s)'} (${a.fechaFin})${a.valor != null ? ' — ' + formatoMoneda(a.valor) : ''}</li>`).join('') +
       '</ul></div>';
   }
   cont.innerHTML = html;
@@ -1156,7 +1183,7 @@ function renderActividades() {
 
   const tbody = document.getElementById('cuerpoActividades');
   if (filtradas.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#777;">No hay actividades que coincidan.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#777;">No hay actividades que coincidan.</td></tr>';
     return;
   }
 
@@ -1173,6 +1200,7 @@ function renderActividades() {
     return `<tr class="${filaClase}" id="actrow_${a.id}">
       <td>${a.nombre}</td>
       <td>${a.categoria || '-'}</td>
+      <td>${a.unidad || '-'}</td>
       <td>${badgeEstado(a.estado)}</td>
       <td>${badgeImportancia(a.importancia)}</td>
       <td>${a.fechaInicio || '-'}</td>
@@ -1191,14 +1219,14 @@ function renderActividades() {
 function exportarActividadesExcel() {
   const actividades = cargarActividades();
   if (actividades.length === 0) { alert('No hay actividades para exportar.'); return; }
-  const columnas = ['Actividad', 'Categoría', 'Estado', 'Importancia', 'Inicio', 'Vence', 'Valor Estimado', 'Observación'];
+  const columnas = ['Actividad', 'Categoría', 'Casa/Apto', 'Estado', 'Importancia', 'Inicio', 'Vence', 'Valor Estimado', 'Observación'];
   const filas = actividades
     .map(a => ({...a, dias: diasRestantes(a.fechaFin)}))
     .sort((x,y) => (x.dias ?? 9999) - (y.dias ?? 9999))
-    .map(a => [a.nombre, a.categoria || '-', a.estado, a.importancia || 'Media', a.fechaInicio || '-', a.fechaFin, a.valor != null ? a.valor : 0, a.observacion || '']);
+    .map(a => [a.nombre, a.categoria || '-', a.unidad || '-', a.estado, a.importancia || 'Media', a.fechaInicio || '-', a.fechaFin, a.valor != null ? a.valor : 0, a.observacion || '']);
 
   const wb = XLSX.utils.book_new();
-  const ws = hojaConEncabezado('Reporte de Seguimiento de Actividades', `${nombreAdminActual()} — Generado el ${fechaHoyTexto()} — ordenado por proximidad de vencimiento`, columnas, filas, [6]);
+  const ws = hojaConEncabezado('Reporte de Seguimiento de Actividades', `${nombreAdminActual()} — Generado el ${fechaHoyTexto()} — ordenado por proximidad de vencimiento`, columnas, filas, [7]);
   XLSX.utils.book_append_sheet(wb, ws, 'Actividades');
   descargarLibro(wb, 'Reporte_Actividades_' + nombreAdminActual().replace(/\s+/g,'_') + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
 }
@@ -1315,9 +1343,9 @@ function exportarDashboardExcel() {
   const wsResumen = hojaConEncabezado('Dashboard de Actividades', `${nombreAdminActual()} — Periodo: ${periodoNombre} — Generado el ${fechaHoyTexto()}`, columnasResumen, filasResumen, []);
   XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
 
-  const columnasDetalle = ['Actividad', 'Categoría', 'Estado', 'Importancia', 'Inicio', 'Vence', 'Valor Estimado'];
-  const filasDetalle = actividades.map(a => [a.nombre, a.categoria || '-', a.estado, a.importancia || 'Media', a.fechaInicio || '-', a.fechaFin, a.valor != null ? a.valor : 0]);
-  const wsDetalle = hojaConEncabezado('Detalle de Actividades del Periodo', periodoNombre, columnasDetalle, filasDetalle, [6]);
+  const columnasDetalle = ['Actividad', 'Categoría', 'Casa/Apto', 'Estado', 'Importancia', 'Inicio', 'Vence', 'Valor Estimado'];
+  const filasDetalle = actividades.map(a => [a.nombre, a.categoria || '-', a.unidad || '-', a.estado, a.importancia || 'Media', a.fechaInicio || '-', a.fechaFin, a.valor != null ? a.valor : 0]);
+  const wsDetalle = hojaConEncabezado('Detalle de Actividades del Periodo', periodoNombre, columnasDetalle, filasDetalle, [7]);
   XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle');
 
   descargarLibro(wb, 'Dashboard_' + nombreAdminActual().replace(/\s+/g,'_') + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
