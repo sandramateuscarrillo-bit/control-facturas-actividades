@@ -320,6 +320,10 @@
         <select id="filtroCategoriaAct" onchange="renderActividades()"></select>
       </div>
       <div>
+        <label>Filtrar por casa / apto</label>
+        <select id="filtroUnidadAct" onchange="renderActividades()"></select>
+      </div>
+      <div>
         <label>Filtrar por importancia</label>
         <select id="filtroImportanciaAct" onchange="renderActividades()">
           <option value="">Todas</option>
@@ -1090,6 +1094,13 @@ function renderListasCategoriaAct() {
   const prev = selFiltro.value;
   selFiltro.innerHTML = '<option value="">Todas</option>' + todas.map(c => `<option value="${c}">${c}</option>`).join('');
   if (todas.includes(prev)) selFiltro.value = prev;
+
+  // Lista de casas / apartamentos existentes para el filtro
+  const unidades = Array.from(new Set(actividades.map(a => a.unidad).filter(u => u && u.trim()))).sort();
+  const selUnidad = document.getElementById('filtroUnidadAct');
+  const prevU = selUnidad.value;
+  selUnidad.innerHTML = '<option value="">Todas</option>' + unidades.map(u => `<option value="${u}">${u}</option>`).join('');
+  if (unidades.includes(prevU)) selUnidad.value = prevU;
 }
 
 function renderAlertas() {
@@ -1132,6 +1143,7 @@ function irAActividad(id) {
   // Quita filtros que pudieran ocultar la actividad, para asegurar que se vea.
   document.getElementById('filtroEstadoAct').value = '';
   document.getElementById('filtroCategoriaAct').value = '';
+  document.getElementById('filtroUnidadAct').value = '';
   document.getElementById('filtroImportanciaAct').value = '';
   document.getElementById('filtroVencimientoAct').value = '';
   document.getElementById('filtroTextoAct').value = '';
@@ -1151,6 +1163,7 @@ function renderActividades() {
   const actividades = cargarActividades();
   const filtroEstado = document.getElementById('filtroEstadoAct').value;
   const filtroCat = document.getElementById('filtroCategoriaAct').value;
+  const filtroUnidad = document.getElementById('filtroUnidadAct').value;
   const filtroImportancia = document.getElementById('filtroImportanciaAct').value;
   const filtroVencimiento = document.getElementById('filtroVencimientoAct').value;
   const filtroTexto = document.getElementById('filtroTextoAct').value.toLowerCase();
@@ -1158,6 +1171,7 @@ function renderActividades() {
   let filtradas = actividades.filter(a => {
     if (filtroEstado && a.estado !== filtroEstado) return false;
     if (filtroCat && a.categoria !== filtroCat) return false;
+    if (filtroUnidad && (a.unidad || '') !== filtroUnidad) return false;
     if (filtroImportancia && (a.importancia || 'Media') !== filtroImportancia) return false;
     if (filtroVencimiento) {
       const dias = diasRestantes(a.fechaFin);
